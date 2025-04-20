@@ -1,125 +1,124 @@
 
-# 📑 Identification API Docs
+# 📑 API Documentation of Identificati0n.com 
 
-## 도입 문의
-Telegram **@identificati0ncom || @sunr1s2_0**
+# 1. 연락처
+**텔레그렘 공지 채널**: https://t.me/identificati0ncom 
+**API 도입 문의**: https://t.me/amkakxk11x
 
----
+# 2. API 타입
+- **Common Types**:
+  ```ts
+  enum IdentificationType {
+    "SMS" = "SMS",
+    "PASS" = "PASS"
+  }
 
-## 기본 Request 정보
+  enum Gender {
+    "MAN" = "MAN",
+    "WOMAN" = "WOMAN"
+  }
 
-- **API 제공업체 (apiProviders)**:
-  - `"DANAL"` | `"SCI"` | `"NICE2"` | `"KG"` | `"KMC1"`
-  - `NICE2, KG, KMC1` 은 현재 SMS 인증만 지원합니다.
-  - `KG` 에서는 시범적으로 커스텀 헤더 전송을 지원합니다. (Pro 전용, 시범적으로 적용되었습니다.)
+  export type MobileCarrier = "KT" | "SKT" | "LGU" | "MVNO_KT" | "MVNO_SKT" | "MVNO_LGU";
 
-- **Authorization**:
-  - Header
-  - - `Authorization`: `{Access Token}`
+  type APIProviderId = "SCI" | "DANAL" | "KMC" | "KMC2" | "NICE2";
+  ```
+  - `KMC, KMC1, NICE2`은 PASS인증을 제외한, SMS 인증만 지원합니다.
 
-- **Responses**
-  - **성공 Response**
-  ```json
-  {
-    "success": true,
-    "message": "string"
+- **Request Headers**:
+  ```ts
+  type RequestHeaders = {
+    Authorization: string
   }
   ```
 
-  - **실패 Response**:
-  ```json
-  {
-    "success": false,
-    "message": "string"
+- **Common Failure Response Types**
+  ```ts
+  type CommonFailureResponse = {
+    success: false,
+    message: string
   }
   ```
 
 ---
 
-## API Endpoint 목록
-
-## 본인인증 요청
----
-### GET `/api-providers`
-사용 가능한 인증 API 제공업체 및 인증 지원 타입(supportedIdentificationTypes) 조회  
+## GET `/api-providers`
+사용 가능한 인증 API 제공업체를 조회합니다.  
 
 **Response**:
-```json
-[
-  {
-    "id": "DANAL",
-    "supportedIdentificationTypes": ["SMS", "PASS"] // S
-  },
-  ...
-]
+```ts
+type APIProvidersResponse = {
+    id: APIProviderId;
+    supportedIdentificationTypes: IdentificationType[];
+}[]
 ```
 
 ---
 
-### POST `/:apiProvider/request`
+## POST `/:apiProvider/request`
 인증 요청을 생성합니다.
 
-**Payload (JSON)**:
-```json
-{
-  "identificationType": "SMS" | "PASS",
-  "name": "string",
-  "phone": "01012345678",
-  "birthdate": "20010205" 또는 "010205",
-  "gender": "1~8" (6자리 생일) | "MAN" | "WOMAN" (8자리 생일),
-  "isForeigner": true | false, // (8자리 생일일 때 필요)
-  "carrier": "KT" | "SKT" | "LGU" | "MVNO_KT" | "MVNO_SKT" | "MVNO_LGU",
-  "identifierAlias": "string", // 선택
-  "customMessageHeader": ""    // 선택 (Pro 전용)
+**Payload Type**:
+```ts
+type VerificationRequestPayload = {
+  identificationType: IdentificationType;
+  carrier: MobileCarrier;
+  name: string; // e.g. "홍길동"
+  phone: string; // e.g. "01012345678"
+  birthdate: string; // 2001년 1월 1일생 기준 e.g. "20010101" 또는 "010101"
+  gender: string | Gender; // birthdate가 8자리: "MAN" | "WOMAN" & birthdate가 6자리: "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8"
+  isForeigner?: boolean; // birthdate가 8자리일 떄 required.
+  identifierAlias?: string; // 추후 verify에서 사용자 식별을 위한 정보. e.g. 113272558293939930 (디스코드 아이디) 또는 nec2nice (다른 식별 가능 정보)
+  customMessageHeader?: string; // 선택 (Pro 전용)
 }
 ```
 
-**Response**:
-```json
-{
-  "success": true,
-  "message": "Request has been created.",
-  "expirationTime": 60000,
-  "taskId": "string",
-  "verificationContext": {
-    "mobileCarrier": "KT",
-    "identificationType": "SMS",
-    "name": "홍길동",
-    "phone": "01012345678",
-    "birthdate": "2001-02-05T00:00:00.000Z",
-    "gender": "MAN",
-    "isForeigner": false
+**Response Type**:
+```ts
+type VerificationRequestResponse = {
+  success: true,
+  message: "Request has been created.",
+  expirationTime: 60000,
+  taskId: string,
+  verificationContext: {
+    mobileCarrier: MobileCarrier,
+    identificationType: IdentificationType,
+    name: string,
+    phone: string,
+    birthdate: string, // e.g. "2001-02-05T00:00:00.000Z"
+    gender: Gender,
+    isForeigner: boolean
   },
-  "identifierAlias": "디스코드ID 또는 UNKNOWN"
+  identifierAlias: string | "UNKNOWN"
 }
 ```
 
 ---
 
-### POST `/verify`
+## POST `/verify`
 인증 코드 혹은 PASS 앱 인증 여부를 확인합니다.
 
-**Payload (JSON)**:
-```json
-{
-  "taskId": "string", // /:apiProvider/request 에서 생성된 taskId를 입력하셔야 합니다.
-  "smsCode": "123456" // SMS 방식일 때만 필수
+**Payload Type**:
+```ts
+type VerifyIdentityRequestPayload = {
+  taskId: string; // /:apiProvider/request 에서 반환된 taskId
+  smsCode?: string // identificationType이 SMS일 떄 required. 
 }
 ```
 
-**Response**:
-```json
-{
-  "success": true,
-  "message": "Verification succeeded.",
-  "verificationContext": {
-    "mobileCarrier": "KT",
-    "identificationType": "SMS",
-    "name": "홍길동",
-    "phone": "01012345678",
-    "birthdate": "2001-02-05T00:00:00.000Z",
-    "gender": "MAN"
+**Response Type**:
+```ts
+type VerifyIdentityRequestResponse = {
+  success: true,
+  message: string,
+  verificationContext: {
+    mobileCarrier: MobileCarrier,
+    identificationType: IdentificationType,
+    name: string,
+    phone: string,
+    birthdate: string, // e.g. "2001-02-05T00:00:00.000Z"
+    gender: Gender,
+    isForeigner: boolean
   },
-  "identifierAlias": "디스코드ID"
+  identifierAlias: string | "UNKNOWN"
 }
 ```
